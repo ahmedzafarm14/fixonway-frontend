@@ -23,9 +23,9 @@ function Register() {
                 Full Name
               </label>
               <input
-                id="signup-name"
                 type="text"
                 placeholder="John Doe"
+                required
                 className="w-full p-3 rounded-md bg-gray-900 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500"
               />
             </div>
@@ -34,18 +34,33 @@ function Register() {
                 Email
               </label>
               <input
-                id="signup-email"
                 type="email"
                 placeholder="you@example.com"
                 className="w-full p-3 rounded-md bg-gray-900 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                required
               />
+            </div>
+            <div className="mb-4">
+              <label className="block mb-2 text-sm font-semibold text-white">
+                I am a...
+              </label>
+              <select
+                className="w-full p-3 rounded-md bg-gray-900 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500"
+                defaultValue=""
+                required
+              >
+                <option value="" disabled>
+                  -- Select a role --
+                </option>
+                <option value="provider">Provider</option>
+                <option value="acquirer">Acquirer</option>
+              </select>
             </div>
             <div className="mb-4">
               <label className="block mb-2 text-sm font-semibold text-white">
                 Password
               </label>
               <input
-                id="signup-password"
                 type="password"
                 placeholder="••••••••"
                 className="w-full p-3 rounded-md bg-gray-900 text-white border border-gray-600 focus:outline-none focus:ring-2 focus:ring-orange-500"
