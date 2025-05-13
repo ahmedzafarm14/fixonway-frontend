@@ -11,10 +11,8 @@ const RouteLinks = () => {
       <Router>
         <Routes>
           <Route path="/" element={<FixonwayLandingPage />} />
-          <Route
-            path="/service-provider-dashboard"
-            element={<FixonwayDashboard />}
-          />
+          <Route path="/provider" element={<FixonwayDashboard />} />
+          <Route path="/acquirer" element={<div>Acquirer Dashboard</div>} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
           {/* <Route path="/dashboard" element={<div>Dashboard</div>} /> */}
