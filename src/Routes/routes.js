@@ -6,7 +6,8 @@ import FixonwayLandingPage from "../Pages/FixonwayLandingPage";
 import FixonwayDashboard from "../Pages/ProviderDashboard";
 import ProtectedRoute from "./ProtectedRoutes.jsx";
 import PublicOnlyRoute from "./PublicOnlyRoutes.jsx";
-import NotFound from "../Pages/NotFoundPage";
+import NotFound from "../Pages/NotFoundPage.jsx";
+import AcquirerDashboard from "../Pages/AcquirerDashboard.jsx";
 
 const RouteLinks = () => {
   return (
@@ -47,7 +48,7 @@ const RouteLinks = () => {
           path="/acquirer"
           element={
             <ProtectedRoute requiredRole="acquirer">
-              <div>Acquirer Dashboard</div>
+              <AcquirerDashboard />
             </ProtectedRoute>
           }
         />
