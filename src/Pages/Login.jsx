@@ -9,7 +9,7 @@ function Login() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
-  const navigate = useNavigate();
+  const navigate = useNavigate("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
@@ -28,11 +28,10 @@ function Login() {
       sessionStorage.setItem("isLoggedIn", true);
       sessionStorage.setItem("userId", user._id);
       if (user.role === "acquirer") {
-        navigate("acquirer");
+        navigate("/acquirer");
       } else {
-        navigate("provider");
+        navigate("/provider");
       }
-      // Redirect to the dashboard or home page
     } catch (err) {
       setError(err.response?.data?.message || "An error occurred");
     } finally {

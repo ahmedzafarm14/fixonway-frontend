@@ -1,24 +1,58 @@
 import React from "react";
-import { BrowserRouter as Router, Route, Routes } from "react-router-dom";
+import { BrowserRouter as Router, Routes, Route } from "react-router-dom";
 import Login from "../Pages/Login";
 import Register from "../Pages/Register";
-import FixonwayDashboard from "../Pages/ProviderDashboard.jsx";
-import FixonwayLandingPage from "../Pages/FixonwayLandingPage.jsx";
+import FixonwayLandingPage from "../Pages/FixonwayLandingPage";
+import FixonwayDashboard from "../Pages/ProviderDashboard";
+import ProtectedRoute from "./ProtectedRoutes.jsx";
+import PublicOnlyRoute from "./PublicOnlyRoutes.jsx";
+import NotFound from "../Pages/NotFoundPage";
 
 const RouteLinks = () => {
   return (
-    <div>
-      <Router>
-        <Routes>
-          <Route path="/" element={<FixonwayLandingPage />} />
-          <Route path="/provider" element={<FixonwayDashboard />} />
-          <Route path="/acquirer" element={<div>Acquirer Dashboard</div>} />
-          <Route path="/login" element={<Login />} />
-          <Route path="/register" element={<Register />} />
-          {/* <Route path="/dashboard" element={<div>Dashboard</div>} /> */}
-        </Routes>
-      </Router>
-    </div>
+    <Router>
+      <Routes>
+        {/* Public routes */}
+        <Route path="/" element={<FixonwayLandingPage />} />
+        <Route path="*" element={<NotFound />} />
+
+        {/* Auth-only routes */}
+        <Route
+          path="/login"
+          element={
+            <PublicOnlyRoute>
+              <Login />
+            </PublicOnlyRoute>
+          }
+        />
+        <Route
+          path="/register"
+          element={
+            <PublicOnlyRoute>
+              <Register />
+            </PublicOnlyRoute>
+          }
+        />
+
+        {/* Protected routes */}
+        <Route
+          path="/provider"
+          element={
+            <ProtectedRoute requiredRole="provider">
+              <FixonwayDashboard />
+            </ProtectedRoute>
+          }
+        />
+        <Route
+          path="/acquirer"
+          element={
+            <ProtectedRoute requiredRole="acquirer">
+              <div>Acquirer Dashboard</div>
+            </ProtectedRoute>
+          }
+        />
+      </Routes>
+    </Router>
   );
 };
 
