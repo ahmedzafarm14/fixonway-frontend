@@ -4,6 +4,7 @@ import ErrorAlert from "../Components/ErrorAlert";
 import SuccessAlert from "../Components/SuccessAlert";
 import Loader from "../Components/Loader";
 import axios from "axios";
+import { getCurrentLocation } from "../Utils/Utils.js";
 
 function Register() {
   const [formData, setFormData] = useState({
@@ -27,28 +28,6 @@ function Register() {
     }
   }, [error]);
 
-  const getCurrentLocation = () => {
-    return new Promise((resolve, reject) => {
-      if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-          (position) => {
-            const { latitude, longitude } = position.coords;
-            const locationData = {
-              type: "Point",
-              coordinates: [longitude, latitude],
-            };
-            resolve(locationData); // Resolve with location data
-          },
-          (err) => {
-            reject("Error getting location: " + err.message); // Reject with error message
-          }
-        );
-      } else {
-        reject("Geolocation is not supported by this browser.");
-      }
-    });
-  };
-
   // Automatically clear success message after 5 seconds
   useEffect(() => {
     if (success) {
@@ -69,7 +48,7 @@ function Register() {
     e.preventDefault();
     setLoading(true);
     try {
-      const locationData = await getCurrentLocation(); // Wait for the location
+      const locationData = await getCurrentLocation();
 
       const { name, email, role, password } = formData;
       const formSubmissionData = {
@@ -80,7 +59,7 @@ function Register() {
         location: locationData || {
           type: "Point",
           coordinates: [0, 0],
-        }, // Use the fetched location or default to [0, 0]
+        },
       };
 
       const response = await axios.post(

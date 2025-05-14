@@ -5,6 +5,7 @@ import axios from "axios";
 import MapComponent from "../Components/Map.jsx";
 import ErrorAlert from "../Components/ErrorAlert.jsx";
 import SuccessAlert from "../Components/SuccessAlert.jsx";
+import { getCurrentLocation } from "../Utils/Utils.js";
 
 const FixonwayDashboard = () => {
   const [activeTab, setActiveTab] = useState("analytics");
@@ -38,6 +39,38 @@ const FixonwayDashboard = () => {
   const handleEdit = (service) => {
     setEditingService(service);
   };
+  const handleOnChangeService = (e) => {
+    setEditingService({
+      ...editingService,
+      [e.target.name]: e.target.value,
+    });
+  };
+  const handleEditChange = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await axios.put(
+        `${process.env.REACT_APP_BACKEND_BASE_URL}/api/services/update-service/${editingService._id}`,
+        {
+          ...editingService,
+        }
+      );
+      setServices(
+        services.map((service) =>
+          service._id === editingService._id ? response.data : service
+        )
+      );
+      setEditingService(null);
+      setSuccessMessage("Service updated successfully");
+      setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (error) {
+      console.error("Error updating service:", error);
+      setErrorMessage("Failed to update service. Please try again.");
+      setTimeout(() => setErrorMessage(""), 3000);
+    } finally {
+      setEditingService(null);
+    }
+  };
+
   const handleNewServiceChange = (e) => {
     const { name, value } = e.target;
     setNewService((prev) => ({
@@ -92,22 +125,6 @@ const FixonwayDashboard = () => {
       return () => clearTimeout(timer);
     }
   }, [successMessage]);
-  const handleSave = (e) => {
-    e.preventDefault();
-    const formData = new FormData(e.target);
-    const updatedService = {
-      id: editingService.id,
-      name: formData.get("name"),
-      price: formData.get("price"),
-    };
-
-    setServices(
-      services.map((service) =>
-        service.id === updatedService.id ? updatedService : service
-      )
-    );
-    setEditingService(null);
-  };
 
   const confirmDelete = (id) => {
     setServiceToDelete(id);
@@ -152,7 +169,6 @@ const FixonwayDashboard = () => {
             },
           }
         );
-        console.log(response.data);
         setServices(response.data);
       } catch (error) {
         console.error("Error fetching services:", error);
@@ -176,6 +192,41 @@ const FixonwayDashboard = () => {
 
     fetchCategories();
   }, []);
+  const updateLocationHandle = async () => {
+    try {
+      const locationData = await getCurrentLocation();
+
+      const response = await axios.put(
+        `${
+          process.env.REACT_APP_BACKEND_BASE_URL
+        }/api/services/update-location/${sessionStorage.getItem("userId")}`,
+        {
+          location: locationData || {
+            type: "Point",
+            coordinates: [0, 0],
+          },
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${sessionStorage.getItem("token")}`,
+          },
+        }
+      );
+      const usr = sessionStorage.getItem("user");
+      if (usr) {
+        const user = JSON.parse(usr);
+        user.location = response.data.location;
+        sessionStorage.setItem("user", JSON.stringify(user));
+      }
+
+      setSuccessMessage("Location updated successfully!");
+      setTimeout(() => setSuccessMessage(""), 3000);
+    } catch (error) {
+      console.error("Error updating location:", error);
+      setErrorMessage("Error updating location!");
+      setTimeout(() => setErrorMessage(""), 3000);
+    }
+  };
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -191,14 +242,14 @@ const FixonwayDashboard = () => {
                   transition={{ type: "spring", stiffness: 500, damping: 30 }}
                   className="h-8 w-8 bg-indigo-600 rounded-md flex items-center justify-center"
                 >
-                  {/* <svg
+                  <svg
                     className="h-5 w-5 text-white"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
                   >
                     <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                  </svg> */}
+                  </svg>
                 </motion.div>
                 <span className="ml-2 text-xl font-bold text-gray-900">
                   Fixonway
@@ -478,14 +529,30 @@ const FixonwayDashboard = () => {
               transition={{ duration: 0.3 }}
               className="bg-white shadow rounded-lg overflow-hidden mb-8"
             >
-              <div className="px-4 py-5 sm:px-6 border-b border-gray-200">
-                <h3 className="text-lg leading-6 font-medium text-gray-900">
-                  Service Analytics
-                </h3>
-                <p className="mt-1 text-sm text-gray-500">
-                  View your service performance
-                </p>
+              <div className="px-4 py-5 sm:px-6 border-b border-gray-200 flex items-center justify-between">
+                <div>
+                  <h3 className="text-lg leading-6 font-medium text-gray-900">
+                    Service Analytics
+                  </h3>
+                  <p className="mt-1 text-sm text-gray-500">
+                    View your service performance
+                  </p>
+                </div>
+                <motion.button
+                  whileTap={{ scale: 0.9 }}
+                  className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded focus:outline-none focus:shadow-outline"
+                  onClick={updateLocationHandle}
+                >
+                  <svg
+                    className="w-5 h-5 inline-block mr-1"
+                    fill="none"
+                    viewBox="0 0 24 24"
+                    stroke="currentColor"
+                  ></svg>
+                  Update Location
+                </motion.button>
               </div>
+
               <div className="p-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-6">
                   <motion.div
@@ -562,41 +629,30 @@ const FixonwayDashboard = () => {
                   Edit Service
                 </h3>
               </div>
-              <form onSubmit={handleSave}>
+              <form onSubmit={handleEditChange}>
                 <div className="p-6 space-y-4">
-                  <div>
-                    <label
-                      htmlFor="name"
-                      className="block text-sm font-medium text-gray-700"
-                    >
-                      Service Name
-                    </label>
-                    <input
-                      type="text"
-                      name="name"
-                      id="name"
-                      defaultValue={editingService.name}
-                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
-                    />
-                  </div>
                   <div>
                     <label
                       htmlFor="category"
                       className="block text-sm font-medium text-gray-700"
                     >
-                      Category
+                      Name
                     </label>
                     <select
-                      id="category"
-                      name="category"
-                      defaultValue={editingService.category}
-                      className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+                      id="name"
+                      name="name"
+                      onChange={handleOnChangeService}
+                      defaultValue={editingService.name}
+                      className="mt-1 block w-full pl-3 pr-10 py-2 text-base border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md transition ease-in-out duration-150 max-w-full"
                     >
-                      <option>Tire Services</option>
-                      <option>Maintenance</option>
-                      <option>Electrical</option>
-                      <option>Mechanical</option>
-                      <option>Other</option>
+                      <option value="" disabled className="text-gray-400">
+                        Select a category
+                      </option>
+                      {categories.map((category, index) => (
+                        <option key={index} value={category.name}>
+                          {category.name}
+                        </option>
+                      ))}
                     </select>
                   </div>
                   <div>
@@ -609,6 +665,7 @@ const FixonwayDashboard = () => {
                     <input
                       type="text"
                       name="price"
+                      onChange={handleOnChangeService}
                       id="price"
                       defaultValue={editingService.price}
                       className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
