@@ -1,29 +1,36 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import ChatUI from "./ChatUI.jsx";
+import axios from "axios";
+import MapComponent from "../Components/Map.jsx";
+import ErrorAlert from "../Components/ErrorAlert.jsx";
+import SuccessAlert from "../Components/SuccessAlert.jsx";
 
 const FixonwayDashboard = () => {
   const [activeTab, setActiveTab] = useState("analytics");
-  const [services, setServices] = useState([
-    {
-      id: 1,
-      name: "Puncture Repair",
-      category: "Tire Services",
-      price: "$25",
-    },
-    {
-      id: 2,
-      name: "Oil Change",
-      category: "Maintenance",
-      price: "$50",
-    },
-    {
-      id: 3,
-      name: "Battery Replacement",
-      category: "Electrical",
-      price: "$120",
-    },
-  ]);
+  const [categories, setCategories] = useState([]);
+  const [newService, setNewService] = useState({
+    name: "",
+    details: "",
+    price: "",
+  });
+  const [errorMessage, setErrorMessage] = useState("");
+  const [successMessage, setSuccessMessage] = useState("");
+  const [newServiceModal, setNewServiceModal] = useState(false);
+  const [isOnline, setIsOnline] = useState(() => {
+    const storedUser = sessionStorage.getItem("user");
+    if (storedUser) {
+      try {
+        const parsed = JSON.parse(storedUser);
+        return parsed.isAvailable ?? false;
+      } catch (err) {
+        console.error("Failed to parse user from sessionStorage:", err);
+      }
+    }
+    return false;
+  });
+
+  const [services, setServices] = useState([]);
   const [editingService, setEditingService] = useState(null);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [serviceToDelete, setServiceToDelete] = useState(null);
@@ -31,16 +38,67 @@ const FixonwayDashboard = () => {
   const handleEdit = (service) => {
     setEditingService(service);
   };
+  const handleNewServiceChange = (e) => {
+    const { name, value } = e.target;
+    setNewService((prev) => ({
+      ...prev,
+      [name]: value,
+    }));
+  };
+  const handleNewServiceSubmit = async (e) => {
+    e.preventDefault();
+    try {
+      const response = await axios.post(
+        `${process.env.REACT_APP_BACKEND_BASE_URL}/api/services/add-service`,
+        {
+          ...newService,
+          providerId: sessionStorage.getItem("userId"),
+        },
+        {
+          headers: {
+            Authorization: `Bearer ${sessionStorage.getItem("token")}`,
+          },
+        }
+      );
+      setServices((prev) => [...prev, response.data]);
 
+      setSuccessMessage("Service created successfully!");
+    } catch (error) {
+      console.error("Error creating new service:", error);
+      setErrorMessage("Failed to create service. Please try again.");
+      return;
+    } finally {
+      setNewServiceModal(false);
+      setNewService({
+        name: "",
+        details: "",
+        price: "",
+      });
+    }
+  };
+  useEffect(() => {
+    if (errorMessage) {
+      const timer = setTimeout(() => {
+        setErrorMessage("");
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [errorMessage]);
+  useEffect(() => {
+    if (successMessage) {
+      const timer = setTimeout(() => {
+        setSuccessMessage("");
+      }, 3000);
+      return () => clearTimeout(timer);
+    }
+  }, [successMessage]);
   const handleSave = (e) => {
     e.preventDefault();
     const formData = new FormData(e.target);
     const updatedService = {
       id: editingService.id,
       name: formData.get("name"),
-      category: formData.get("category"),
       price: formData.get("price"),
-      status: editingService.status,
     };
 
     setServices(
@@ -56,11 +114,68 @@ const FixonwayDashboard = () => {
     setShowDeleteModal(true);
   };
 
-  const deleteService = () => {
-    setServices(services.filter((service) => service.id !== serviceToDelete));
-    setShowDeleteModal(false);
-    setServiceToDelete(null);
+  const deleteService = async () => {
+    try {
+      await axios.delete(
+        `${process.env.REACT_APP_BACKEND_BASE_URL}/api/services/delete-service/${serviceToDelete}`,
+        {
+          headers: {
+            Authorization: `Bearer ${sessionStorage.getItem("token")}`,
+          },
+        }
+      );
+
+      const updatedServices = services.filter(
+        (serviceee) => serviceee._id !== serviceToDelete
+      );
+      setServices(updatedServices);
+      setSuccessMessage("Service deleted successfully!");
+    } catch (error) {
+      console.error("Error deleting service:", error);
+      setErrorMessage("Failed to delete service. Please try again.");
+    } finally {
+      setShowDeleteModal(false);
+      setServiceToDelete(null);
+    }
   };
+
+  useEffect(() => {
+    const fetchServices = async () => {
+      try {
+        const response = await axios.get(
+          `${
+            process.env.REACT_APP_BACKEND_BASE_URL
+          }/api/services/provider/${sessionStorage.getItem("userId")}`,
+          {
+            headers: {
+              Authorization: `Bearer ${sessionStorage.getItem("token")}`,
+            },
+          }
+        );
+        console.log(response.data);
+        setServices(response.data);
+      } catch (error) {
+        console.error("Error fetching services:", error);
+      }
+    };
+
+    fetchServices();
+  }, []);
+  useEffect(() => {
+    const fetchCategories = async () => {
+      try {
+        const response = await axios.get(
+          `${process.env.REACT_APP_BACKEND_BASE_URL}/api/service-types/get-service-types`
+        );
+
+        setCategories(response.data);
+      } catch (error) {
+        console.error("Error fetching categories:", error);
+      }
+    };
+
+    fetchCategories();
+  }, []);
 
   return (
     <div className="min-h-screen bg-gray-50">
@@ -76,14 +191,14 @@ const FixonwayDashboard = () => {
                   transition={{ type: "spring", stiffness: 500, damping: 30 }}
                   className="h-8 w-8 bg-indigo-600 rounded-md flex items-center justify-center"
                 >
-                  <svg
+                  {/* <svg
                     className="h-5 w-5 text-white"
                     viewBox="0 0 24 24"
                     fill="none"
                     stroke="currentColor"
                   >
                     <path d="M12 2L2 7l10 5 10-5-10-5zM2 17l10 5 10-5M2 12l10 5 10-5" />
-                  </svg>
+                  </svg> */}
                 </motion.div>
                 <span className="ml-2 text-xl font-bold text-gray-900">
                   Fixonway
@@ -129,26 +244,68 @@ const FixonwayDashboard = () => {
               </div>
             </div>
             <div className="hidden sm:ml-6 sm:flex sm:items-center">
-              <motion.button
-                whileHover={{ rotate: 10 }}
-                whileTap={{ scale: 0.9 }}
-                className="p-1 rounded-full text-gray-400 hover:text-gray-500 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
-              >
-                <span className="sr-only">Notifications</span>
-                <svg
-                  className="h-6 w-6"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
+              <div className="ml-3 flex items-center space-x-2">
+                <motion.div
+                  onClick={async () => {
+                    try {
+                      const newStatus = !isOnline;
+                      setIsOnline(newStatus);
+
+                      const response = await axios.post(
+                        `${process.env.REACT_APP_BACKEND_BASE_URL}/api/auth/status-change`,
+                        { changeStatus: newStatus },
+                        {
+                          headers: {
+                            Authorization: `Bearer ${sessionStorage.getItem(
+                              "token"
+                            )}`,
+                          },
+                        }
+                      );
+                      console.log(response.data.message);
+                      const storedUser = sessionStorage.getItem("user");
+                      if (storedUser) {
+                        const user = JSON.parse(storedUser);
+                        user.isAvailable = newStatus;
+                        sessionStorage.setItem("user", JSON.stringify(user));
+                      }
+                    } catch (error) {
+                      console.error(
+                        "Error updating user status:",
+                        error.response.data
+                      );
+                      setIsOnline(!isOnline);
+                      const storedUser = sessionStorage.getItem("user");
+                      if (storedUser) {
+                        const user = JSON.parse(storedUser);
+                        user.isAvailable = isOnline;
+                        sessionStorage.setItem("user", JSON.stringify(user));
+                      }
+                    }
+                  }}
+                  className="relative inline-flex items-center h-6 w-12 rounded-full cursor-pointer"
+                  initial={false}
+                  animate={{
+                    backgroundColor: isOnline ? "#4ade80" : "#9ca3af", // Tailwind's green-400 and gray-400
+                  }}
+                  transition={{ duration: 0.3 }}
                 >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth="2"
-                    d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9"
+                  <motion.div
+                    layout
+                    transition={{ type: "spring", stiffness: 700, damping: 30 }}
+                    className="absolute left-1 h-5 w-5 bg-white rounded-full shadow"
+                    animate={{ x: isOnline ? 24 : 0 }}
                   />
-                </svg>
-              </motion.button>
+                </motion.div>
+                <span
+                  className={`text-sm font-medium ${
+                    isOnline ? "text-green-700" : "text-gray-600"
+                  }`}
+                >
+                  {isOnline ? "Online" : "Offline"}
+                </span>
+              </div>
+
               <div className="ml-3 relative">
                 <motion.div whileHover={{ scale: 1.05 }}>
                   <button className="flex text-sm rounded-full focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500">
@@ -167,6 +324,12 @@ const FixonwayDashboard = () => {
       </nav>
 
       {/* Main Content */}
+      {errorMessage && errorMessage.length > 1 && (
+        <ErrorAlert error={errorMessage} className="fixed" />
+      )}
+      {successMessage && successMessage.length > 1 && (
+        <SuccessAlert success={successMessage} className="fixed" />
+      )}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Welcome Banner */}
         {["services", "analytics"].includes(activeTab) && (
@@ -190,6 +353,7 @@ const FixonwayDashboard = () => {
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
+                  onClick={() => setNewServiceModal(true)}
                   className="mt-4 md:mt-0 px-6 py-2 bg-white text-indigo-600 font-medium rounded-lg shadow hover:bg-gray-100"
                 >
                   Add New Service
@@ -229,12 +393,7 @@ const FixonwayDashboard = () => {
                         >
                           Service
                         </th>
-                        <th
-                          scope="col"
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                        >
-                          Category
-                        </th>
+
                         <th
                           scope="col"
                           className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
@@ -250,9 +409,9 @@ const FixonwayDashboard = () => {
                       </tr>
                     </thead>
                     <tbody className="bg-white divide-y divide-gray-200">
-                      {services.map((service) => (
+                      {services.map((service, index) => (
                         <motion.tr
-                          key={service.id}
+                          key={index}
                           initial={{ opacity: 0 }}
                           animate={{ opacity: 1 }}
                           transition={{ duration: 0.3 }}
@@ -262,11 +421,6 @@ const FixonwayDashboard = () => {
                           <td className="px-6 py-4 whitespace-nowrap">
                             <div className="text-sm font-medium text-gray-900">
                               {service.name}
-                            </div>
-                          </td>
-                          <td className="px-6 py-4 whitespace-nowrap">
-                            <div className="text-sm text-gray-500">
-                              {service.category}
                             </div>
                           </td>
                           <td className="px-6 py-4 whitespace-nowrap">
@@ -286,7 +440,7 @@ const FixonwayDashboard = () => {
                             <motion.button
                               whileHover={{ scale: 1.1 }}
                               whileTap={{ scale: 0.9 }}
-                              onClick={() => confirmDelete(service.id)}
+                              onClick={() => confirmDelete(service._id)}
                               className="text-red-600 hover:text-red-900"
                             >
                               Delete
@@ -347,14 +501,21 @@ const FixonwayDashboard = () => {
                   </motion.div>
                   <motion.div
                     whileHover={{ y: -5 }}
-                    className="bg-green-50 rounded-lg p-6 shadow"
+                    className="bg-green-50 rounded-lg p-1 shadow"
                   >
-                    <h4 className="text-lg font-medium text-green-800">
-                      Active Services
-                    </h4>
-                    <p className="text-3xl font-bold text-green-600 mt-2">
-                      {services.filter((s) => s.status === "active").length}
-                    </p>
+                    <MapComponent
+                      coordinates={(() => {
+                        const us = sessionStorage.getItem("user");
+                        if (!us) return null;
+                        try {
+                          const parsedUs = JSON.parse(us);
+                          return parsedUs?.location?.coordinates || null;
+                        } catch (e) {
+                          console.error("Failed to parse user:", e);
+                          return null;
+                        }
+                      })()}
+                    />
                   </motion.div>
                 </div>
                 <div className="bg-gray-100 rounded-lg p-8 text-center">
@@ -520,6 +681,106 @@ const FixonwayDashboard = () => {
                   Delete
                 </motion.button>
               </div>
+            </motion.div>
+          </motion.div>
+        )}
+
+        {/* New Service Modal */}
+        {newServiceModal && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50"
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              className="bg-white rounded-lg shadow-xl max-w-md w-full"
+            >
+              <div className="px-6 py-4 border-b border-gray-200">
+                <h3 className="text-lg font-medium text-gray-900">
+                  Add New Service
+                </h3>
+              </div>
+              <form onSubmit={handleNewServiceSubmit}>
+                <div className="p-6 space-y-4">
+                  <div>
+                    <label
+                      htmlFor="category"
+                      className="block text-sm font-medium text-gray-700"
+                    >
+                      Name
+                    </label>
+                    <select
+                      id="name"
+                      name="name"
+                      onChange={handleNewServiceChange}
+                      defaultValue=""
+                      className="mt-1 block w-full pl-3 pr-10 py-2 text-base border border-gray-300 bg-white text-gray-900 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md transition ease-in-out duration-150 max-w-full"
+                    >
+                      <option value="" disabled className="text-gray-400">
+                        Select a category
+                      </option>
+                      {categories.map((category, index) => (
+                        <option key={index} value={category.name}>
+                          {category.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="name"
+                      className="block text-sm font-medium text-gray-700"
+                    >
+                      Details
+                    </label>
+                    <textarea
+                      rows={2}
+                      name="details"
+                      onChange={handleNewServiceChange}
+                      id="details"
+                      placeholder="Service details"
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    />
+                  </div>
+                  <div>
+                    <label
+                      htmlFor="price"
+                      className="block text-sm font-medium text-gray-700"
+                    >
+                      Price
+                    </label>
+                    <input
+                      type="text"
+                      name="price"
+                      onChange={handleNewServiceChange}
+                      id="price"
+                      className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm py-2 px-3 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm"
+                    />
+                  </div>
+                </div>
+                <div className="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    type="button"
+                    onClick={() => setNewServiceModal(null)}
+                    className="bg-white py-2 px-4 border border-gray-300 rounded-md shadow-sm text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  >
+                    Cancel
+                  </motion.button>
+                  <motion.button
+                    whileHover={{ scale: 1.05 }}
+                    whileTap={{ scale: 0.95 }}
+                    type="submit"
+                    className="inline-flex justify-center py-2 px-4 border border-transparent shadow-sm text-sm font-medium rounded-md text-white bg-indigo-600 hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-indigo-500"
+                  >
+                    Save
+                  </motion.button>
+                </div>
+              </form>
             </motion.div>
           </motion.div>
         )}

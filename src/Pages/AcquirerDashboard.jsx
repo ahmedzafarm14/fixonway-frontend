@@ -53,7 +53,7 @@ const AcquirerDashboard = () => {
           />
           <h2 className="text-3xl font-bold mt-4">Do You Need Help?</h2>
           <p className="text-gray-300 mt-2">
-            Tell us your issue and we’ll show nearby service providers.
+            Tell us your issue and we'll show nearby service providers.
           </p>
 
           <form className="mt-6 text-left space-y-4" onSubmit={handleRequest}>
