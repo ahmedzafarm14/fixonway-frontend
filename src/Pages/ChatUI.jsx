@@ -5,6 +5,7 @@ import Loader from "../Components/Loader.jsx";
 const ChatUI = ({ user }) => {
   const userId = useRef(sessionStorage.getItem("userId"));
   const socket = useContext(SocketContext);
+
   const [loading, setLoading] = useState(false);
   const [chats, setChats] = useState([]);
   const [messages, setMessages] = useState([]);
@@ -21,110 +22,152 @@ const ChatUI = ({ user }) => {
     scrollToBottom();
   }, [messages]);
 
+  // 1. Get All Chats
   useEffect(() => {
-    if (!userId) return;
+    if (!userId.current) return;
+    setLoading(true);
 
     socket.emit("getAllChats", { userId: userId.current });
 
-    socket.on("allChats", (data) => {
+    const handleAllChats = (data) => {
       setChats(data);
       setLoading(false);
-    });
-    console.log(chats);
-    socket.on("chatError", (err) => {
+    };
+
+    const handleChatError = (err) => {
       console.error(err.message);
       setLoading(false);
-    });
+    };
+
+    socket.on("allChats", handleAllChats);
+    socket.on("chatError", handleChatError);
 
     return () => {
-      socket.off("allChats");
-      socket.off("chatError");
+      socket.off("allChats", handleAllChats);
+      socket.off("chatError", handleChatError);
     };
-  }, []);
+  }, [socket]);
+
+  // 2. Handle Real-Time Incoming Messages
+  useEffect(() => {
+    const handleNewMessage = (message) => {
+      if (message.chatId === activeChat) {
+        setMessages((prev) => [...prev, message]);
+      }
+
+      // Move chat to top if it's in the chat list
+      setChats((prev) => {
+        const index = prev.findIndex((c) => c.chatId === message.chatId);
+        if (index === -1) return prev;
+
+        const updated = [...prev];
+        const [chatToMove] = updated.splice(index, 1);
+        updated.unshift(chatToMove);
+        return updated;
+      });
+    };
+
+    socket.on("newMessage", handleNewMessage);
+    return () => {
+      socket.off("newMessage", handleNewMessage);
+    };
+  }, [socket, activeChat]);
+
+  // 3. Join Chat + Fetch Messages When User is Passed as Prop
+  useEffect(() => {
+    if (!user || !userId.current) return;
+
+    socket.emit("joinChat", {
+      userId: userId.current,
+      otherUserId: user._id,
+    });
+
+    const handleChatJoined = (chatData) => {
+      setActiveChat(chatData.chatId);
+      setOtherUser(user);
+      setMessages(chatData.messages || []); // Initialize messages correctly
+
+      setChats((prevChats) => {
+        const existingIndex = prevChats.findIndex(
+          (c) => c.chatId.toString() === chatData.chatId.toString()
+        );
+        if (existingIndex !== -1) {
+          const updated = [...prevChats];
+          const [existingChat] = updated.splice(existingIndex, 1);
+          updated.unshift(existingChat);
+          return updated;
+        } else {
+          return [chatData, ...prevChats];
+        }
+      });
+    };
+
+    socket.on("chatJoined", handleChatJoined);
+    socket.on("error", console.error);
+
+    return () => {
+      socket.off("chatJoined", handleChatJoined);
+      socket.off("error", console.error);
+    };
+  }, [user, socket]);
+
+  // 4. Handle Chat Click
+  useEffect(() => {
+    const handleMessages = (msgs) => {
+      setMessages(msgs);
+    };
+
+    socket.on("chatMessages", handleMessages);
+
+    return () => {
+      socket.off("chatMessages", handleMessages);
+    };
+  }, [socket]);
+
+  const handleChatClick = (chat) => {
+    if (activeChat === chat.chatId) return;
+
+    setActiveChat(chat.chatId);
+    setOtherUser(chat.oppositeUser);
+    setMessages([]); // temporary clear to avoid flicker
+
+    // Join room
+    socket.emit("joinChat", {
+      userId: userId.current,
+      otherUserId: chat.oppositeUser._id,
+    });
+
+    // Fetch messages explicitly
+    socket.emit("getMessages", { chatId: chat.chatId });
+  };
 
   const formatTime = (dateString) => {
     const date = new Date(dateString);
     return date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
   };
 
-  //Sidebar chat click
-  const handleChatClick = (chat) => {
-    if (activeChat === chat.chatId) return;
-    const otherParticipant = chat.oppositeUser;
-    setActiveChat(chat.chatId);
-    setOtherUser(otherParticipant);
-    setMessages(chat.messages);
-  };
-
   const handleSendMessage = () => {
     if (!messageInput.trim() || !activeChat) return;
 
     const newMessage = {
-      _id: `msg-${Date.now()}`,
+      _id: `msg-${Date.now()}`, // Temporary ID
       chatId: activeChat,
-      sender: userId,
+      sender: { _id: userId.current },
       content: messageInput,
+      deliveredToPerson: otherUser._id,
       createdAt: new Date().toISOString(),
     };
 
-    setMessages((prev) => [...prev, newMessage]);
-    setMessageInput("");
+    // Emit message
+    socket.emit("sendMessage", newMessage);
+
+    setMessageInput(""); // Clear input after sending
   };
 
-  useEffect(() => {
-    if (user) {
-      socket.emit("joinChat", {
-        userId: userId.current,
-        otherUserId: user._id,
-      });
-      socket.on("chatJoined", (chatData) => {
-        console.log("Successfully joined chat with ID:", chatData);
-        setActiveChat(chatData.chatId);
-        setOtherUser(user);
-        setMessages(chatData.messages);
-        setChats((prevChats) => {
-          const existingIndex = prevChats.findIndex(
-            (c) => c.chatId.toString() === chatData.chatId.toString()
-          );
-
-          if (existingIndex !== -1) {
-            // Move existing chat to index 1
-            const updatedChats = [...prevChats];
-            const [existingChat] = updatedChats.splice(existingIndex, 1);
-            updatedChats.splice(1, 0, existingChat);
-            return updatedChats;
-          } else {
-            // Insert new chat at index 0
-            return [chatData, ...prevChats];
-          }
-        });
-
-        socket.on("error", (message) => {
-          console.error(message);
-        });
-        return () => {
-          socket.off("chatJoined");
-          socket.off("error");
-        };
-      });
-    }
-  }, []);
-  //Chat Array
-  /*  [
-    {
-      chatId: new ObjectId('682768c7dfe7cd4ca144c072'),
-      oppositeUser: {
-        _id: new ObjectId('682367566dbd2cbacce63f04'),
-        fullName: 'Ahmad Zafar',
-        email: 'ahmedzafarm14@gmail.com'
-      },
-      lastMessage: null,
-      messages: []
-    }
-  ]*/
   return (
     <div className="flex h-screen bg-gray-100">
       {loading && <Loader />}
+
       {/* Sidebar */}
       <div className="w-1/4 bg-white border-r border-gray-200 flex flex-col">
         <div className="p-4 bg-indigo-600 text-white">
@@ -132,38 +175,34 @@ const ChatUI = ({ user }) => {
         </div>
 
         <div className="flex-1 overflow-y-auto">
-          {chats.map((chat) => {
-            const otherParticipant = chat.oppositeUser;
-
-            return (
-              <div
-                key={chat.chatId}
-                onClick={() => handleChatClick(chat)}
-                className={`flex items-center p-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors duration-200 ${
-                  activeChat === chat.chatId ? "bg-indigo-50" : ""
-                }`}
-              >
-                <div className="h-10 w-10 rounded-full bg-indigo-200 flex items-center justify-center text-indigo-800 font-bold">
-                  {otherParticipant?.fullName?.charAt(0)}
-                </div>
-                <div className="ml-3 flex-1">
-                  <div className="flex justify-between items-center">
-                    <h3 className="text-sm text-gray-900">
-                      {otherParticipant?.fullName}
-                    </h3>
-                    <span className="text-xs text-gray-500">
-                      {chat.lastMessage
-                        ? formatTime(chat.lastMessage.createdAt)
-                        : ""}
-                    </span>
-                  </div>
-                  <p className="text-xs truncate text-gray-500">
-                    {chat.lastMessage?.content || "No messages yet"}
-                  </p>
-                </div>
+          {chats.map((chat) => (
+            <div
+              key={chat.chatId}
+              onClick={() => handleChatClick(chat)}
+              className={`flex items-center p-3 border-b border-gray-100 cursor-pointer hover:bg-gray-50 transition-colors duration-200 ${
+                activeChat === chat.chatId ? "bg-indigo-50" : ""
+              }`}
+            >
+              <div className="h-10 w-10 rounded-full bg-indigo-200 flex items-center justify-center text-indigo-800 font-bold">
+                {chat.oppositeUser?.fullName?.charAt(0)}
               </div>
-            );
-          })}
+              <div className="ml-3 flex-1">
+                <div className="flex justify-between items-center">
+                  <h3 className="text-sm text-gray-900">
+                    {chat.oppositeUser?.fullName}
+                  </h3>
+                  <span className="text-xs text-gray-500">
+                    {chat.lastMessage
+                      ? formatTime(chat.lastMessage.createdAt)
+                      : ""}
+                  </span>
+                </div>
+                <p className="text-xs truncate text-gray-500">
+                  {chat.lastMessage?.content || "No messages yet"}
+                </p>
+              </div>
+            </div>
+          ))}
         </div>
       </div>
 
@@ -184,33 +223,32 @@ const ChatUI = ({ user }) => {
             {/* Messages */}
             <div className="flex-1 p-4 overflow-y-auto bg-gray-50">
               <div className="space-y-3">
-                {messages.map((message) => (
+                {messages.map((message, index) => (
                   <div
-                    key={message._id}
+                    key={index}
                     className={`flex ${
-                      message.sender === userId ? "justify-end" : "items-start"
+                      message.sender._id === userId.current ||
+                      message.sender._id === undefined
+                        ? "justify-end"
+                        : "items-start"
                     }`}
                   >
-                    {message.sender !== userId && (
+                    {(message.sender._id !== userId.current ||
+                      message.sender._id === undefined) && (
                       <div className="h-8 w-8 rounded-full bg-indigo-200 flex items-center justify-center text-indigo-800 font-bold text-xs mr-2">
                         {otherUser?.fullName?.charAt(0)}
                       </div>
                     )}
                     <div
                       className={`p-3 rounded-lg shadow-sm max-w-xs ${
-                        message.sender === userId
+                        message.sender._id === userId.current ||
+                        message.sender._id === undefined
                           ? "bg-indigo-600 text-white rounded-tr-none"
-                          : "bg-white rounded-tl-none"
+                          : "bg-white text-black rounded-tl-none"
                       }`}
                     >
                       <p>{message.content}</p>
-                      <p
-                        className={`text-xs mt-1 ${
-                          message.sender === userId
-                            ? "text-indigo-200"
-                            : "text-gray-500"
-                        }`}
-                      >
+                      <p className="text-xs mt-1 opacity-70">
                         {formatTime(message.createdAt)}
                       </p>
                     </div>
@@ -220,48 +258,29 @@ const ChatUI = ({ user }) => {
               </div>
             </div>
 
-            {/* Message Input */}
+            {/* Input */}
             <div className="p-4 border-t border-gray-200 bg-white">
-              <div className="flex items-center">
+              <div className="flex space-x-2">
                 <input
                   type="text"
+                  className="flex-1 border rounded-lg px-3 py-2 text-black focus:outline-none focus:ring-2 focus:ring-indigo-500"
                   placeholder="Type a message..."
-                  className="flex-1 p-2 text-black border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:border-transparent"
                   value={messageInput}
                   onChange={(e) => setMessageInput(e.target.value)}
                   onKeyDown={(e) => e.key === "Enter" && handleSendMessage()}
                 />
                 <button
                   onClick={handleSendMessage}
-                  className="p-2 rounded-full bg-indigo-600 text-white hover:bg-indigo-700 ml-2 transform hover:scale-110 transition-transform duration-200"
+                  className="bg-indigo-600 text-white px-4 py-2 rounded-lg hover:bg-indigo-700 transition"
                 >
-                  <svg
-                    className="h-5 w-5"
-                    fill="none"
-                    viewBox="0 0 24 24"
-                    stroke="currentColor"
-                  >
-                    <path
-                      strokeLinecap="round"
-                      strokeLinejoin="round"
-                      strokeWidth={2}
-                      d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8"
-                    />
-                  </svg>
+                  Send
                 </button>
               </div>
             </div>
           </>
         ) : (
-          <div className="flex-1 flex flex-col items-center justify-center bg-gray-50">
-            <div className="max-w-md text-center p-6">
-              <h2 className="text-xl font-semibold text-gray-800 mb-2">
-                Select a chat to start messaging
-              </h2>
-              <p className="text-gray-500 mb-6">
-                Choose from your existing conversations or start a new one.
-              </p>
-            </div>
+          <div className="flex-1 flex items-center justify-center text-gray-500">
+            Select a chat to start messaging
           </div>
         )}
       </div>
