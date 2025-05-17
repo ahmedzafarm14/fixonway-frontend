@@ -51,6 +51,12 @@ const ChatUI = ({ user }) => {
   // 2. Handle Real-Time Incoming Messages
   useEffect(() => {
     const handleNewMessage = (message) => {
+      message = {
+        ...message,
+        sender: { _id: message.senderId },
+        senderId: undefined,
+      };
+      console.log(message);
       if (message.chatId === activeChat) {
         setMessages((prev) => [...prev, message]);
       }
@@ -227,22 +233,22 @@ const ChatUI = ({ user }) => {
                   <div
                     key={index}
                     className={`flex ${
-                      message.sender._id === userId.current ||
-                      message.sender._id === undefined
+                      message.sender?._id === userId.current ||
+                      message.sender?._id === undefined
                         ? "justify-end"
                         : "items-start"
                     }`}
                   >
-                    {(message.sender._id !== userId.current ||
-                      message.sender._id === undefined) && (
+                    {(message.sender?._id !== userId.current ||
+                      message.sender?._id === undefined) && (
                       <div className="h-8 w-8 rounded-full bg-indigo-200 flex items-center justify-center text-indigo-800 font-bold text-xs mr-2">
                         {otherUser?.fullName?.charAt(0)}
                       </div>
                     )}
                     <div
                       className={`p-3 rounded-lg shadow-sm max-w-xs ${
-                        message.sender._id === userId.current ||
-                        message.sender._id === undefined
+                        message.sender?._id === userId.current ||
+                        message.sender?._id === undefined
                           ? "bg-indigo-600 text-white rounded-tr-none"
                           : "bg-white text-black rounded-tl-none"
                       }`}
